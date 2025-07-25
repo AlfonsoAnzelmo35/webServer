@@ -13,6 +13,8 @@
 
 char img_for_resource_not_found[]= "/home/alfonso/webserver_git_C/webServerC/immagini/Grump_GattoIncazzato.jpg" ;
 char html_for_resource_not_found[] = "/home/alfonso/webserver_git_C/webServerC/htmls/resource_not_found.html" ;
+char file_txt[] = "/home/alfonso/webserver_git_C/webServerC/file.txt" ;
+
 
 struct request_file{
 	char file[100];
@@ -131,9 +133,51 @@ char *get_base64Img(const char* path) {
     free(buffer);
     return encoded;
 }
+//invio della risposta 200
+void send_html(int fd_client_socket, char *mime_type, char *requested_file){        
+	printf("\n invio html\n");
+	struct stat st;
+	char buf_header[256] ;
+	int fd_HTML = 0, tot_byte_read = 0, byte_read = 0 ;
+	unsigned char * html_buf = NULL ;
+	char  *buf_html= NULL;
 
+	stat(requested_file, &st) ;
+	buf_html = malloc(st.st_size * sizeof(unsigned char));
+
+	snprintf(buf_header, 256,
+			"HTTP/1.1 200 OK\r\n"
+			"Content-Type: %s\r\n"
+			"Content-Length: %ld\r\n"
+        	        "Connection: keep-alive\r\n"
+                	"Cache-Control: no-cache\r\n"
+                	"Date: Sun, 14 Jul 2025 10:23:45 GMT\r\n"
+                	"Server: Apache/2.4.41 (Ubuntu)\r\n"
+                	"\r\n",   // doppia riga vuota per separare header da corpo
+                mime_type, st.st_size);
+	send(fd_client_socket, buf_header, strlen(buf_header) , 0) ;
+        //apertura del file html
+        if((fd_HTML = open(requested_file, O_RDONLY))< 0){
+                fprintf(stderr, "Errore %d: %s\n", errno, strerror(errno)) ;
+                exit(EXIT_FAILURE);
+        }
+        //lettura del file richiesto
+        while((byte_read = read(fd_HTML, buf_html + tot_byte_read, sizeof(buf_html))) > 0){
+                tot_byte_read += byte_read;
+	}
+	printf("\n%s\n", buf_html) ;
+	//invio del file
+        send(fd_client_socket, buf_html, strlen(buf_html) , 0) ;
+
+        close(fd_HTML);
+        free(buf_html);
+        printf("fine invio file html\n");
+
+}
+
+//invio della risposta 404 con immagine
 void file_not_found_send_html_2(int fd_client_socket){
-	
+
 	char *base64Img = get_base64Img(img_for_resource_not_found) ;
 	printf("\n base 64Img %s\n", base64Img) ;
 
@@ -179,8 +223,6 @@ void file_not_found_send_html_2(int fd_client_socket){
 	//stat(img_for_resource_not_found, &st) ;
 	//header_size += st.st_size;
 	
-	stat(final_html, &st) ;
-	header_size += st.st_size;
 	size_t content_length = strlen(final_html);
 
 	snprintf(buf, 256,
@@ -200,23 +242,29 @@ void file_not_found_send_html_2(int fd_client_socket){
 
     	free(final_html);
 	
+
 }
-void build_http_response(int fd, char * request){
+
+int build_http_response(int fd_client_socket, char * request){
+	char buf_header_ok[256];
+	char * requested_url = NULL, *mime_type = NULL;	
+	struct request_file requestfile ;
+	int file_descriptor_requested = 0;
+	struct stat st;
+
 	//ottieni l'url dalla richiesta
-	char * requested_url  = get_requested_Url(request);	
+	requested_url = get_requested_Url(request);	
 	
 	//decodifica dell'url, per permettere al server di accedere alla risors
 	//char *decoded_requested_url = decode_url(requested_url);
 	
 	//trova il file richiesto, e l'estensione
-	struct request_file requestfile ;
 	get_file_fileExtension2(&requestfile, requested_url);
-
+	
 	//ottieni il mimetype
-	char * mime_type  = get_mime_type(requestfile.ext);
+	mime_type  = get_mime_type(requestfile.ext);
 
 	//ottieni la risorsa
-	int file_descriptor_requested = 0;
 	file_descriptor_requested = open(requestfile.file, O_RDONLY);
 	
 	//stampa info
@@ -224,41 +272,15 @@ void build_http_response(int fd, char * request){
 				requestfile.file, requestfile.ext, mime_type, file_descriptor_requested);
 	
 	//error nel file non trovato
-	if(file_descriptor_requested < 0){
-		file_not_found_send_html_2(fd) ;
-		//if(strcmp(mime_type, "text/html") == 0)
-		//	file_not_found_send_html(fd) ;
-		//else
-		//	file_not_found_send_img(fd) ;	
-	}
-
-	/*
-	//scrittura header della risposta
-	snprintf(response, 4096,
-		"HTTP/1.1 200 OK\r\n"
-		"Content-Type: %s\r\n"
-		"Content-Length: 1234\r\n"
-		"Connection: keep-alive\r\n"
-		"Cache-Control: no-cache\r\n"
-		"Date: Sun, 14 Jul 2025 10:23:45 GMT\r\n"
-		"Server: Apache/2.4.41 (Ubuntu)\r\n"
-		"\r\n",   // doppia riga vuota per separare header da corpo
-		mime_type);
-
-	//lettura e stipatura nella risposta
-        int nBytesRead = sizeof(response) ;
-        while(1){
-
-                nBytesRead = read(file_descriptor_requested, response + *(response + nBytesRead),
-				       	sizeof(response)) ;
-                
-		//printf("byte letti : %d\n\n ",nBytesRead);
-                if(nBytesRead < 0){
-                        fprintf(stderr, "Errore %d: %s\n", errno, strerror(errno)) ;
-                        exit(EXIT_FAILURE);
-                }
-        }
-*/
-//	free(decoded_requested_url);	
+	if(file_descriptor_requested < 0)
+		file_not_found_send_html_2(fd_client_socket);
 	
+	//togli queste 2 linee	
+	stat(file_txt, &st) ;
+	printf("st size:%ld", st.st_size);
+	
+
+	//invio della risora richiesta
+	send_html(fd_client_socket, mime_type, file_txt) ;
+	return 0;	
 }

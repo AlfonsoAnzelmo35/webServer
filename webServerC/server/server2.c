@@ -79,15 +79,15 @@ void *handle_client(void *arg){
 	printf("\n HEADERS DELLA RICHIESTA : %s \n", request_headers);
 
 	//costruzione e invio della risposta
-	build_http_response(parameterThread->fd, request_headers);
+	if(build_http_response(parameterThread->fd, request_headers))
+		close(parameterThread->fd) ;
 	
 
 
 	
 	//chiudi il file descriptor del socket del client salvato appena prima che il thread termini.
 	free(request_headers);
-	
-	close(parameterThread->fd) ;
+	//close(parameterThread->fd) ;
 }
 
 void create_thread(pthread_t *thread, int client_socket_fd){
