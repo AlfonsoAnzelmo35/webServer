@@ -13,7 +13,7 @@
 
 char img_for_resource_not_found[]= "/home/alfonso/webserver_git_C/webServerC/immagini/Grump_GattoIncazzato.jpg" ;
 char html_for_resource_not_found[] = "/home/alfonso/webserver_git_C/webServerC/htmls/resource_not_found.html" ;
-char file_txt[] = "/home/alfonso/webserver_git_C/webServerC/file.txt" ;
+//char file_txt[] = "/home/alfonso/webserver_git_C/webServerC/%s" ;
 
 
 struct request_file{
@@ -204,12 +204,14 @@ void file_not_found_send_html_2(int fd_client_socket){
 
 	size_t new_html_size = strlen(buf_html) - strlen("{{placeholder}}") + strlen(base64Img);
 	char *final_html = malloc(new_html_size * sizeof(char) + 1) ;
-	
+	final_html[0] = '\0';	
 
 	size_t prefix_pos = placeholder - buf_html ;
 	//printf("\n prefix_pos - %ld\n", prefix_pos);
 	strncpy(final_html, buf_html, prefix_pos) ;
-	
+	final_html[prefix_pos] = '\0';
+
+
 	strcat(final_html, base64Img);
 	strcat(final_html, placeholder + strlen("{{placeholder}}"));
 	
@@ -239,8 +241,8 @@ void file_not_found_send_html_2(int fd_client_socket){
 	
 	//invio file html
 	send(fd_client_socket, final_html, strlen(final_html), 0);
-
-    	free(final_html);
+    	close(fdHtml) ;
+	free(final_html);
 	
 
 }
@@ -264,23 +266,33 @@ int build_http_response(int fd_client_socket, char * request){
 	//ottieni il mimetype
 	mime_type  = get_mime_type(requestfile.ext);
 
+
+	char *file_requested = malloc(256 * sizeof(char)) ; 
+	snprintf(file_requested, 256,
+		       	"/home/alfonso/webserver_git_C/webServerC/htmls/%s", requestfile.file);
+	printf("\n file_requested %s \n", file_requested) ;
+	
 	//ottieni la risorsa
-	file_descriptor_requested = open(requestfile.file, O_RDONLY);
+	file_descriptor_requested = open(file_requested, O_RDONLY);
 	
 	//stampa info
-	printf("\n\nnome file : %s -- estensione :%s -- mime type :%s -- fdRequested:%d \n\n", 
-				requestfile.file, requestfile.ext, mime_type, file_descriptor_requested);
+	printf("\n\nnome file : %s -- estensione :%s -- mime type :%s -- fdRequested:%d \n\n",
+		requestfile.file, requestfile.ext, mime_type, file_descriptor_requested);
 	
 	//error nel file non trovato
-	if(file_descriptor_requested < 0)
+	if(file_descriptor_requested < 0){
+		fprintf(stderr, "Errore %d: %s\n", errno, strerror(errno)) ;
 		file_not_found_send_html_2(fd_client_socket);
-	
+	}else {	
 	//togli queste 2 linee	
-	stat(file_txt, &st) ;
-	printf("st size:%ld", st.st_size);
+	
+	//stat(file_txt, &st) ;
+	//printf("st size:%ld", st.st_size);
 	
 
 	//invio della risora richiesta
-	send_html(fd_client_socket, mime_type, file_txt) ;
+	send_html(fd_client_socket, mime_type, file_requested) ;
+	}
+	
 	return 0;	
 }
